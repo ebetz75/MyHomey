@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { 
+  font-family: 'Inter', sans-serif; 
+  background-color: #f3f4f6; 
+  overscroll-behavior-y: none; 
+}
+
+/* Hide scrollbar for cleaner UI in some lists */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Mobile optimization: prevent pull-to-refresh on mobile to feel more native */
+html, body { height: 100%; overflow: hidden; }
+#root { height: 100%; overflow-y: auto; }
+
+/* Safe area padding for notched phones */
+.pt-safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
