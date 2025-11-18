@@ -204,7 +204,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ items, onDelete })
                 </div>
               </div>
             </div>
-          )}})}
+          );
+          })}
         </div>
       )}
     </div>
