@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import { InventoryItem, CATEGORIES, ROOMS, Conveyance } from '../types';
-import { X, Camera, Sparkles, Loader2, Check, MapPin, Calendar, Hash, Home, Box, ShieldCheck, Wrench } from 'lucide-react';
+import { X, Camera, Sparkles, Loader2, Check, MapPin, Calendar, Hash, Home, Box, ShieldCheck, Wrench, ScanBarcode, StopCircle } from 'lucide-react';
 import { analyzeItemImage } from '../services/geminiService';
 
 interface AddItemModalProps {
@@ -10,10 +11,16 @@ interface AddItemModalProps {
 }
 
 export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onSave }) => {
-  const [activeTab, setActiveTab] = useState<'manual' | 'ai'>('ai');
+  const [activeTab, setActiveTab] = useState<'manual' | 'ai' | 'barcode'>('ai');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Barcode Scanner State
+  const [isScanning, setIsScanning] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -30,7 +37,93 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onS
     maintenanceNotes: ''
   });
 
+  // Clean up video stream on close or tab change
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopScanner();
+      setImagePreview(null);
+      setIsAnalyzing(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const startScanner = async () => {
+    setBarcodeError(null);
+    try {
+      // Check for browser support
+      if (!('BarcodeDetector' in window)) {
+        setBarcodeError("Barcode Detection not supported on this device. Try the AI Scan!");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsScanning(true);
+        detectBarcodes();
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+      setBarcodeError("Could not access camera. Check permissions.");
+    }
+  };
+
+  const stopScanner = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsScanning(false);
+  };
+
+  const detectBarcodes = async () => {
+    if (!videoRef.current || !streamRef.current) return;
+    
+    // @ts-ignore - BarcodeDetector is experimental but works on Android Chrome
+    const barcodeDetector = new window.BarcodeDetector({
+      formats: ['ean_13', 'upc_a', 'upc_e', 'qr_code', 'code_128']
+    });
+
+    const scanLoop = async () => {
+      if (!streamRef.current) return;
+      
+      try {
+        const barcodes = await barcodeDetector.detect(videoRef.current);
+        if (barcodes.length > 0) {
+          const code = barcodes[0].rawValue;
+          // Found a barcode!
+          stopScanner();
+          // Populate field
+          setFormData(prev => ({
+            ...prev,
+            serialNumber: code,
+            description: prev.description ? `${prev.description} (Scanned: ${code})` : `Barcode: ${code}`
+          }));
+          // Switch to manual to review
+          setActiveTab('manual');
+        } else {
+          requestAnimationFrame(scanLoop);
+        }
+      } catch (e) {
+        // Continue scanning if detection fails momentarily
+        requestAnimationFrame(scanLoop);
+      }
+    };
+    
+    scanLoop();
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -102,7 +195,17 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onS
       maintenanceNotes: ''
     });
     setImagePreview(null);
+    stopScanner();
     onClose();
+  };
+
+  const handleTabChange = (tab: 'manual' | 'ai' | 'barcode') => {
+    setActiveTab(tab);
+    if (tab === 'barcode') {
+      startScanner();
+    } else {
+      stopScanner();
+    }
   };
 
   return (
@@ -120,21 +223,31 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onS
         {/* Scrollable Content */}
         <div className="overflow-y-auto flex-1 p-6">
           {/* Tabs */}
-          <div className="flex p-1 mb-6 bg-gray-100 rounded-xl">
+          <div className="flex p-1 mb-6 bg-gray-100 rounded-xl overflow-hidden">
             <button
               type="button"
-              onClick={() => setActiveTab('ai')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${
+              onClick={() => handleTabChange('ai')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${
                 activeTab === 'ai' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
               AI Scan
             </button>
             <button
+              type="button"
+              onClick={() => handleTabChange('barcode')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${
+                activeTab === 'barcode' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <ScanBarcode className="w-3 h-3 sm:w-4 sm:h-4" />
+              Barcode
+            </button>
+            <button
                type="button"
-              onClick={() => setActiveTab('manual')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${
+              onClick={() => handleTabChange('manual')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${
                 activeTab === 'manual' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -143,43 +256,74 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onS
           </div>
 
           <form id="addItemForm" onSubmit={handleSubmit} className="space-y-5">
-            {/* Image Upload Section */}
-            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*" 
-                capture="environment"
-                onChange={handleImageUpload} 
-              />
-              
-              <div className={`h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-colors overflow-hidden ${imagePreview ? 'border-indigo-500 bg-gray-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'}`}>
-                {imagePreview ? (
-                  <div className="relative w-full h-full">
-                    <img src={imagePreview} alt="Preview" className="w-full h-full object-contain" />
-                    {isAnalyzing && (
-                      <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white backdrop-blur-sm">
-                        <Loader2 className="w-8 h-8 animate-spin mb-2" />
-                        <span className="text-sm font-medium animate-pulse">Gemini is analyzing...</span>
-                      </div>
-                    )}
-                    {!isAnalyzing && activeTab === 'ai' && (
-                       <div className="absolute bottom-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-lg">
-                         <Check className="w-3 h-3" /> Analyzed
-                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center p-4">
-                    <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <Camera className="w-5 h-5" />
+            {/* Dynamic Input Area based on Tab */}
+            
+            {/* AI / Image Mode */}
+            {activeTab === 'ai' && (
+              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  capture="environment"
+                  onChange={handleImageUpload} 
+                />
+                
+                <div className={`h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-colors overflow-hidden ${imagePreview ? 'border-indigo-500 bg-gray-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'}`}>
+                  {imagePreview ? (
+                    <div className="relative w-full h-full">
+                      <img src={imagePreview} alt="Preview" className="w-full h-full object-contain" />
+                      {isAnalyzing && (
+                        <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+                          <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                          <span className="text-sm font-medium animate-pulse">Gemini is analyzing...</span>
+                        </div>
+                      )}
+                      {!isAnalyzing && (
+                         <div className="absolute bottom-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-lg">
+                           <Check className="w-3 h-3" /> Analyzed
+                         </div>
+                      )}
                     </div>
-                    <p className="text-sm font-medium text-gray-700">Take Photo</p>
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-center p-4">
+                      <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-medium text-gray-700">Take Photo</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Barcode Mode */}
+            {activeTab === 'barcode' && (
+               <div className="h-40 rounded-2xl bg-black overflow-hidden relative flex items-center justify-center">
+                  {barcodeError ? (
+                    <div className="text-white text-center p-4">
+                      <p className="text-sm text-red-300 mb-2">{barcodeError}</p>
+                      <button type="button" onClick={() => handleTabChange('manual')} className="text-xs underline">Switch to Manual</button>
+                    </div>
+                  ) : (
+                    <>
+                       <video ref={videoRef} className="w-full h-full object-cover opacity-80" playsInline muted></video>
+                       <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-48 h-32 border-2 border-red-500/50 rounded-lg animate-pulse relative">
+                             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-red-500"></div>
+                             <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-red-500"></div>
+                             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-red-500"></div>
+                             <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-red-500"></div>
+                          </div>
+                       </div>
+                       <div className="absolute bottom-2 bg-black/50 px-3 py-1 rounded-full text-white text-xs">
+                          Point at barcode
+                       </div>
+                    </>
+                  )}
+               </div>
+            )}
 
             {/* Conveyance Toggle */}
             <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
@@ -274,7 +418,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onS
                         value={formData.serialNumber}
                         onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
                         className="w-full pl-8 pr-3 py-2 rounded-lg border border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none text-xs bg-white"
-                        placeholder="Optional"
+                        placeholder="Scanned / Optional"
                       />
                     </div>
                  </div>
