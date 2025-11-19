@@ -6,6 +6,14 @@ import { InventoryList } from './components/InventoryList';
 import { AddItemModal } from './components/AddItemModal';
 import { LayoutDashboard, List, Plus, Settings, Home, Download } from 'lucide-react';
 
+// Simple UUID generator fallback to ensure compatibility
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+};
+
 const App: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
@@ -14,16 +22,15 @@ const App: React.FC = () => {
   const [showInstallBtn, setShowInstallBtn] = useState(false);
 
   useEffect(() => {
+    // Ensure data exists
     seedDataIfEmpty();
+    // Load data
     setItems(getItems());
 
     // PWA Install Prompt Listener
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent Chrome 67 and earlier from automatically showing the prompt
       e.preventDefault();
-      // Stash the event so it can be triggered later.
       setDeferredPrompt(e);
-      // Update UI to notify the user they can add to home screen
       setShowInstallBtn(true);
     };
 
@@ -36,12 +43,9 @@ const App: React.FC = () => {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
-    // Show the install prompt
     deferredPrompt.prompt();
-    // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`User response to the install prompt: ${outcome}`);
-    // We've used the prompt, and can't use it again, throw it away
     setDeferredPrompt(null);
     setShowInstallBtn(false);
   };
@@ -49,7 +53,7 @@ const App: React.FC = () => {
   const handleSaveItem = (newItemData: Omit<InventoryItem, 'id' | 'dateAdded'>) => {
     const newItem: InventoryItem = {
       ...newItemData,
-      id: crypto.randomUUID(),
+      id: generateId(),
       dateAdded: new Date().toISOString()
     };
     const updatedItems = saveItem(newItem);
