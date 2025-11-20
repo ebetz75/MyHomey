@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+
+import { GoogleGenAI, Type, type Schema } from "@google/genai";
 import { GeminiAnalysisResult, CATEGORIES, ROOMS } from '../types';
 
 const getClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
