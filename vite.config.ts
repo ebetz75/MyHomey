@@ -1,10 +1,9 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+  const env = loadEnv(mode, process.cwd(), '');
   return {
     plugins: [
       react(),
@@ -38,8 +37,10 @@ export default defineConfig(({ mode }) => {
       })
     ],
     define: {
+      // Securely provide the API key
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      'process.env': {},
+      // Polyfill process.env to prevent "process is not defined" errors in libraries
+      'process.env': {}
     },
     build: {
       outDir: 'dist',
