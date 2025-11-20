@@ -2,6 +2,51 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+// @ts-ignore - virtual module provided by vite-plugin-pwa
+import { registerSW } from 'virtual:pwa-register';
+
+// Register Service Worker for PWA capabilities (offline, install)
+registerSW({ immediate: true });
+
+// Simple Error Boundary to catch crashes
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Application Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center h-screen bg-gray-50 text-gray-800 p-6 text-center font-sans">
+          <div className="bg-white p-6 rounded-2xl shadow-lg max-w-xs">
+            <h1 className="text-xl font-bold mb-2 text-red-600">Something went wrong</h1>
+            <p className="text-sm text-gray-500 mb-4">The app encountered an error while loading.</p>
+            <div className="text-xs text-left bg-gray-100 p-2 rounded mb-4 overflow-auto max-h-32 text-gray-600 font-mono">
+              {this.state.error?.toString() || 'Unknown Error'}
+            </div>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-semibold shadow-md shadow-indigo-200"
+            >
+              Reload App
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,6 +56,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
