@@ -5,10 +5,29 @@ import './index.css';
 // @ts-ignore - virtual module provided by vite-plugin-pwa
 import { registerSW } from 'virtual:pwa-register';
 
+// GLOBAL ERROR HANDLER for White Screen debugging
+// This runs before React mounts to catch import/syntax errors
+window.onerror = function(message, source, lineno, colno, error) {
+  const root = document.getElementById('root');
+  if (root) {
+    root.innerHTML = `
+      <div style="padding: 20px; font-family: sans-serif; color: #333;">
+        <h2 style="color: #e11d48;">Startup Error</h2>
+        <p>The app failed to load.</p>
+        <pre style="background: #f1f5f9; padding: 10px; border-radius: 8px; overflow: auto; color: #0f172a; font-size: 12px;">
+${message}
+at ${source}:${lineno}:${colno}
+        </pre>
+        <button onclick="window.location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px;">Reload</button>
+      </div>
+    `;
+  }
+};
+
 // Register Service Worker for PWA capabilities (offline, install)
 registerSW({ immediate: true });
 
-// Simple Error Boundary to catch crashes
+// Simple Error Boundary to catch React render crashes
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
